@@ -149,10 +149,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.key === 'i') switchToTool('pipette');
         });
 
-        // Canvas Wrapper Events (delegated to active layer logic)
-        canvasWrapper.addEventListener('mousedown', startDrawing);
-        window.addEventListener('mousemove', draw);
-        window.addEventListener('mouseup', stopDrawing);
+        // Canvas Wrapper Events (delegated to active layer logic) using Pointer Events for Pen support
+        canvasWrapper.addEventListener('pointerdown', startDrawing);
+        window.addEventListener('pointermove', draw);
+        window.addEventListener('pointerup', stopDrawing);
+        // Prevent default touch gestures
+        canvasWrapper.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
     }
 
     // --- Layer Management ---
@@ -271,7 +273,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function startDrawing(e) {
-        if (e.button !== 0) return;
+        // Pointer events: check for primary button (left click/pen tip)
+        if (e.isPrimary === false || e.button !== 0) return;
+
+        // Prevent default scrolling/selection behavior
+        e.preventDefault();
+
         const ctx = getActiveCtx();
         if (!ctx) return;
 
@@ -279,10 +286,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const layer = state.layers.find(l => l.id === state.activeLayerId);
         if (!layer.visible) return;
 
+        // Use pressure if available (future proofing), for now just position
+        // canvasWrapper.setPointerCapture(e.pointerId); // Keeps events on canvas even if moving out
+
         const { x, y } = getPos(e);
         state.isDrawing = true;
         state.lastX = x;
         state.lastY = y;
+
+        // If pen supports pressure, we could modify size effectively here:
+        // if (e.pressure && e.pointerType === 'pen') { ... }
 
         if (state.currentTool === 'pipette') {
             pickColorGlobal(x, y);
@@ -295,13 +308,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function draw(e) {
         if (!state.isDrawing) return;
+        e.preventDefault();
+
         const ctx = getActiveCtx();
         if (!ctx) return;
 
         const { x, y } = getPos(e);
 
         ctx.beginPath();
-        ctx.lineWidth = state.size;
+
+        // Dynamic size with pressure?
+        let size = state.size;
+        if (e.pointerType === 'pen' && e.pressure > 0) {
+            // Simple pressure sensitivity: 50% to 150% of size?
+            // Or just 0 to 100%? User might prefer consistent lines if not requested.
+            // User specifically asked for "pen tab support" usually implies pressure, 
+            // BUT the request was "fix screen moving". I'll stick to fixed size for now to avoid surprises, 
+            // OR add a toggle later. Let's keep it simple for now.
+        }
+
+        ctx.lineWidth = size;
         ctx.lineCap = state.shape === 'square' ? 'square' : 'round';
         ctx.lineJoin = state.shape === 'square' ? 'miter' : 'round';
 
